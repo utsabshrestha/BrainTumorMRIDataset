@@ -55,9 +55,9 @@ def main():
 
     # Dataset paths
     # Assuming dataset was extracted to args.data_dir/Brain_Tumor_MRI_Dataset
-    dataset_base = os.path.join(args.data_dir, "Brain_Tumor_MRI_Dataset")
-    train_dir = os.path.join(dataset_base, "train")
-    test_dir = os.path.join(dataset_base, "test")
+    dataset_base = os.path.join(args.data_dir, "Epic and CSCR hospital Dataset")
+    train_dir = os.path.join(dataset_base, "Train")
+    test_dir = os.path.join(dataset_base, "Test")
 
     if not os.path.exists(train_dir):
         raise FileNotFoundError(f"Training directory not found at {train_dir}")

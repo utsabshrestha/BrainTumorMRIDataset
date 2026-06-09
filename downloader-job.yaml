@@ -28,8 +28,8 @@ spec:
               echo "=========================================="
               echo "  Step 1: Downloading Brain Tumor MRI Dataset"
               echo "=========================================="
-              if [ -d "$BASE_DIR/Brain_Tumor_MRI_Dataset" ]; then
-                echo "  [SKIP] Dataset already exists at $BASE_DIR/Brain_Tumor_MRI_Dataset."
+              if [ -d "$BASE_DIR/'Epic and CSCR hospital Dataset'" ]; then
+                echo "  [SKIP] Dataset already exists at $BASE_DIR/Epic and CSCR hospital Dataset"
               else
                 if [ ! -f "$ZIP_FILE" ]; then
                   echo "  Downloading from Mendeley..."
@@ -41,14 +41,14 @@ spec:
                 echo "  Extracting dataset..."
                 unzip -q "$ZIP_FILE"
                 rm "$ZIP_FILE"
-                echo "  Dataset successfully extracted to $BASE_DIR/Brain_Tumor_MRI_Dataset."
+                echo "  Dataset successfully extracted to $BASE_DIR/Epic and CSCR hospital Datasett."
               fi
 
               echo ""
               echo "=========================================="
               echo "  Verification"
               echo "=========================================="
-              if [ ! -d "$BASE_DIR/Brain_Tumor_MRI_Dataset/train" ] || [ ! -d "$BASE_DIR/Brain_Tumor_MRI_Dataset/test" ]; then
+              if [ ! -d "$BASE_DIR/'Epic and CSCR hospital Dataset'/Train" ] || [ ! -d "$BASE_DIR/'Epic and CSCR hospital Dataset'/Test" ]; then
                 echo "  [ERROR] Expected train/ and test/ directories not found!"
                 exit 1
               fi
@@ -58,7 +58,7 @@ spec:
               echo "=========================================="
               echo "  Done. PVC usage:"
               echo "=========================================="
-              du -sh "$BASE_DIR"/Brain_Tumor_MRI_Dataset/*
+              du -sh "$BASE_DIR"/'Epic and CSCR hospital Dataset'/*
               df -h /pvc
 
           resources:
