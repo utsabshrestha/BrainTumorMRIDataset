@@ -103,58 +103,63 @@ def main():
     best_acc = 0.0
     ckpt_path = os.path.join(args.ckpt_dir, f"{args.model}_best.pt")
 
-    # Training Loop
-    for epoch in range(args.epochs):
-        model.train()
-        running_loss = 0.0
-        correct = 0
-        total = 0
+    # --- ADDED IF CONDITION BEFORE TRAINING ---
+    if os.path.exists(ckpt_path):
+        print(f"\n[INFO] Checkpoint found at '{ckpt_path}'. Skipping training.")
+    else:
+        print(f"\n[INFO] No existing checkpoint found. Starting training for {args.epochs} epochs...")
+        # Training Loop
+        for epoch in range(args.epochs):
+            model.train()
+            running_loss = 0.0
+            correct = 0
+            total = 0
 
-        for images, labels in train_loader:
-            images, labels = images.to(device), labels.to(device)
-
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-
-            running_loss += loss.item() * images.size(0)
-            _, predicted = outputs.max(1)
-            total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
-
-        train_loss = running_loss / total
-        train_acc = correct / total
-
-        # Validation Loop
-        model.eval()
-        val_loss = 0.0
-        val_correct = 0
-        val_total = 0
-        with torch.no_grad():
-            for images, labels in test_loader:
+            for images, labels in train_loader:
                 images, labels = images.to(device), labels.to(device)
+
+                optimizer.zero_grad()
                 outputs = model(images)
                 loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
 
-                val_loss += loss.item() * images.size(0)
+                running_loss += loss.item() * images.size(0)
                 _, predicted = outputs.max(1)
-                val_total += labels.size(0)
-                val_correct += predicted.eq(labels).sum().item()
+                total += labels.size(0)
+                correct += predicted.eq(labels).sum().item()
 
-        val_loss = val_loss / val_total
-        val_acc = val_correct / val_total
+            train_loss = running_loss / total
+            train_acc = correct / total
 
-        print(f"Epoch [{epoch+1}/{args.epochs}] - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+            # Validation Loop
+            model.eval()
+            val_loss = 0.0
+            val_correct = 0
+            val_total = 0
+            with torch.no_grad():
+                for images, labels in test_loader:
+                    images, labels = images.to(device), labels.to(device)
+                    outputs = model(images)
+                    loss = criterion(outputs, labels)
 
-        # Save Best Model
-        if val_acc > best_acc:
-            best_acc = val_acc
-            torch.save(model.state_dict(), ckpt_path)
-            print(f"  --> Saved new best checkpoint to {ckpt_path}")
+                    val_loss += loss.item() * images.size(0)
+                    _, predicted = outputs.max(1)
+                    val_total += labels.size(0)
+                    val_correct += predicted.eq(labels).sum().item()
 
-    print(f"Training Complete. Best Validation Accuracy: {best_acc:.4f}")
+            val_loss = val_loss / val_total
+            val_acc = val_correct / val_total
+
+            print(f"Epoch [{epoch+1}/{args.epochs}] - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+
+            # Save Best Model
+            if val_acc > best_acc:
+                best_acc = val_acc
+                torch.save(model.state_dict(), ckpt_path)
+                print(f"  --> Saved new best checkpoint to {ckpt_path}")
+
+        print(f"Training Complete. Best Validation Accuracy: {best_acc:.4f}")
 
 if __name__ == "__main__":
     main()

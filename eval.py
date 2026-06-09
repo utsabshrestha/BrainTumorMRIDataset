@@ -26,8 +26,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    dataset_base = os.path.join(args.data_dir, "Brain_Tumor_MRI_Dataset")
-    test_dir = os.path.join(dataset_base, "test")
+    dataset_base = os.path.join(args.data_dir, "Epic and CSCR hospital Dataset")
+    test_dir = os.path.join(dataset_base, "Test")
 
     if not os.path.exists(test_dir):
         raise FileNotFoundError(f"Testing directory not found at {test_dir}")
