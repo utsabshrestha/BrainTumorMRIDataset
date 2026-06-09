@@ -1,0 +1,79 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mri-downloader
+  namespace: kc-ai-research-lab
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: downloader
+          image: ubuntu:22.04
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -e
+              apt-get update -qq && apt-get install -y -qq wget unzip
+
+              # Base directory in PVC
+              BASE_DIR="/pvc/utsab/data"
+              mkdir -p "$BASE_DIR"
+              cd "$BASE_DIR"
+
+              ZIP_FILE="dataset.zip"
+              DOWNLOAD_URL="https://data.mendeley.com/public-files/datasets/zwr4ntf94j/files/a6622842-5f21-4596-b99c-82028bdb4428/file_downloaded"
+
+              echo "=========================================="
+              echo "  Step 1: Downloading Brain Tumor MRI Dataset"
+              echo "=========================================="
+              if [ -d "$BASE_DIR/Brain_Tumor_MRI_Dataset" ]; then
+                echo "  [SKIP] Dataset already exists at $BASE_DIR/Brain_Tumor_MRI_Dataset."
+              else
+                if [ ! -f "$ZIP_FILE" ]; then
+                  echo "  Downloading from Mendeley..."
+                  wget -O "$ZIP_FILE" "$DOWNLOAD_URL"
+                else
+                  echo "  [SKIP] zip file already downloaded."
+                fi
+
+                echo "  Extracting dataset..."
+                unzip -q "$ZIP_FILE"
+                rm "$ZIP_FILE"
+                echo "  Dataset successfully extracted to $BASE_DIR/Brain_Tumor_MRI_Dataset."
+              fi
+
+              echo ""
+              echo "=========================================="
+              echo "  Verification"
+              echo "=========================================="
+              if [ ! -d "$BASE_DIR/Brain_Tumor_MRI_Dataset/train" ] || [ ! -d "$BASE_DIR/Brain_Tumor_MRI_Dataset/test" ]; then
+                echo "  [ERROR] Expected train/ and test/ directories not found!"
+                exit 1
+              fi
+              
+              echo "  Folder structure verified."
+              echo ""
+              echo "=========================================="
+              echo "  Done. PVC usage:"
+              echo "=========================================="
+              du -sh "$BASE_DIR"/Brain_Tumor_MRI_Dataset/*
+              df -h /pvc
+
+          resources:
+            requests:
+              cpu: "2"
+              memory: "4Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+
+          volumeMounts:
+            - name: data
+              mountPath: /pvc
+
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: shape-resnet-pvc
