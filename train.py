@@ -1,3 +1,4 @@
+from HybridCNNViT import HybridCNNViT
 import os
 import argparse
 import torch
@@ -8,6 +9,7 @@ from torchvision import datasets, transforms, models
 import timm
 import random
 import numpy as np
+import math
 
 def set_seed(seed):
     random.seed(seed)
@@ -32,6 +34,8 @@ def get_model(model_name, num_classes):
         model = timm.create_model("vit_small_patch16_224", pretrained=False, num_classes=num_classes)
     elif model_name == "vit_small_pretrained":
         model = timm.create_model("vit_small_patch16_224", pretrained=True, num_classes=num_classes)
+    elif model_name == "hybrid_cnn_vit":
+        model = HybridCNNViT(num_classes=num_classes)
     else:
         raise ValueError(f"Unknown model name: {model_name}")
     return model
@@ -40,11 +44,12 @@ def main():
     parser = argparse.ArgumentParser(description="Train Brain Tumor MRI Classifier")
     parser.add_argument("--data_dir", type=str, required=True, help="Path to base dataset directory (should contain train/ and test/ directories inside Brain_Tumor_MRI_Dataset)")
     parser.add_argument("--ckpt_dir", type=str, required=True, help="Directory to save the trained model checkpoint")
-    parser.add_argument("--model", type=str, required=True, choices=["resnet50_scratch", "resnet50_pretrained", "vit_small_scratch", "vit_small_pretrained"])
+    parser.add_argument("--model", type=str, required=True, choices=["resnet50_scratch", "resnet50_pretrained", "vit_small_scratch", "vit_small_pretrained", "hybrid_cnn_vit"])
     parser.add_argument("--epochs", type=int, default=30)
     parser.add_argument("--batch", type=int, default=32)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--warmup_epochs", type=int, default=5)
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -91,13 +96,36 @@ def main():
     num_classes = len(train_dataset.classes)
     print(f"Classes: {train_dataset.classes}")
 
-    # Model
-    model = get_model(args.model, num_classes)
-    model = model.to(device)
+    model = get_model(args.model, num_classes).to(device)
 
-    # Loss and Optimizer
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
+    # --- Optimizer: differential LR for hybrid, flat LR for everything else ---
+    if args.model == "hybrid_cnn_vit":
+        optimizer = optim.AdamW([
+            {"params": model.layer3.parameters(),          "lr": 1e-5},
+            {"params": model.layer4.parameters(),          "lr": 1e-5},
+            {"params": model.proj.parameters(),            "lr": 3e-4},
+            {"params": model.transformer.parameters(),     "lr": 3e-4},
+            {"params": model.head.parameters(),            "lr": 3e-4},
+            {"params": [model.cls_token, model.pos_embed], "lr": 3e-4},
+        ], weight_decay=1e-4)
+    else:
+        optimizer = optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-4)
+
+    # --- Label smoothing loss (0.1 for hybrid, standard CE for others) ---
+    if args.model == "hybrid_cnn_vit":
+        criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    else:
+        criterion = nn.CrossEntropyLoss()
+
+    if args.model == "hybrid_cnn_vit":
+        def warmup_cosine_lambda(current_epoch):
+            if current_epoch < args.warmup_epochs:
+                return float(current_epoch + 1) / float(args.warmup_epochs)
+            progress = (current_epoch - args.warmup_epochs) / float(max(1, args.epochs - args.warmup_epochs))
+            return 0.5 * (1.0 + math.cos(math.pi * progress))
+        scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warmup_cosine_lambda)
+    else:
+        scheduler = None
 
     os.makedirs(args.ckpt_dir, exist_ok=True)
     best_acc = 0.0
@@ -107,8 +135,14 @@ def main():
     if os.path.exists(ckpt_path):
         print(f"\n[INFO] Checkpoint found at '{ckpt_path}'. Skipping training.")
     else:
-        print(f"\n[INFO] No existing checkpoint found. Starting training for {args.epochs} epochs...")
-        # Training Loop
+        print(f"\n[INFO] No existing checkpoint found. Starting training for {args.epochs} epochs..."
+              f"(warmup: {args.warmup_epochs} epochs)...")
+        
+        # --- Overriding Epochs for HybridCNNViT to 50 ---
+        if args.model == 'hybrid_cnn_vit':
+            args.epochs = 50
+            
+
         for epoch in range(args.epochs):
             model.train()
             running_loss = 0.0
@@ -151,9 +185,17 @@ def main():
             val_loss = val_loss / val_total
             val_acc = val_correct / val_total
 
-            print(f"Epoch [{epoch+1}/{args.epochs}] - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+            if scheduler is not None:
+                scheduler.step()
+                # Current LR for logging (first param group is representative)
+                current_lr = scheduler.get_last_lr()[0] if scheduler is not None else 1e-4
+                print(f"Epoch [{epoch+1:>3}/{args.epochs}] "
+                    f"lr: {current_lr:.2e} | "
+                    f"Train Loss: {train_loss:.4f}  Acc: {train_acc:.4f} | "
+                    f"Val Loss: {val_loss:.4f}  Acc: {val_acc:.4f}")
+            else:
+                print(f"Epoch [{epoch+1}/{args.epochs}] - Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
-            # Save Best Model
             if val_acc > best_acc:
                 best_acc = val_acc
                 torch.save(model.state_dict(), ckpt_path)
