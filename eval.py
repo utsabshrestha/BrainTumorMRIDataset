@@ -1,5 +1,6 @@
 import os
 import argparse
+from Explainability import GradCAM, ViTAttentionVisualizer, save_explanation_plot
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -15,7 +16,7 @@ def main():
     parser.add_argument("--data_dir", type=str, required=True, help="Path to base dataset directory")
     parser.add_argument("--ckpt_dir", type=str, required=True, help="Directory containing the trained model checkpoint")
     parser.add_argument("--results_dir", type=str, required=True, help="Directory to save evaluation results")
-    parser.add_argument("--model", type=str, required=True, choices=["resnet50_scratch", "resnet50_pretrained", "vit_small_scratch", "vit_small_pretrained"])
+    parser.add_argument("--model", type=str, required=True, choices=["resnet50_scratch", "resnet50_pretrained", "vit_small_scratch", "vit_small_pretrained", "hybrid_cnn_vit"])
     parser.add_argument("--batch", type=int, default=32)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--seed", type=int, default=42)
@@ -99,8 +100,85 @@ def main():
     cm_path = os.path.join(args.results_dir, f"{args.model}_confusion_matrix.png")
     plt.savefig(cm_path, bbox_inches='tight')
     plt.close()
+
+
+    # =====================================================================
+    # Generating Visual Model Explanations (New Section)
+    # =====================================================================
+    print("\nGenerating visual model explanations...")
     
-    print(f"Saved metrics and confusion matrix to {args.results_dir}")
+    # Create subfolder inside your output path to keep them organized
+    exp_dir = os.path.join(args.results_dir, f"{args.model}_explanations")
+    os.makedirs(exp_dir, exist_ok=True)
+
+    # Enable gradients so we can backpropagate for Grad-CAM logic
+    torch.set_grad_enabled(True)
+    model.train(False) # Ensure normalization layers are in eval mode
+
+    # Determine visualizer type and initialize
+    explainer = None
+    explainer_type = None
+
+    if args.model in ["resnet50_scratch", "resnet50_pretrained", "hybrid_cnn_vit"]:
+        # Both ResNet and your hybrid CNN-ViT have model.layer4 containing target convolutional outputs.
+        target_layer = model.layer4
+        explainer = GradCAM(model, target_layer)
+        explainer_type = "Grad-CAM"
+    elif args.model in ["vit_small_scratch", "vit_small_pretrained"]:
+        explainer = ViTAttentionVisualizer(model)
+        explainer_type = "Attention Map"
+
+    if explainer is not None:
+        # Step 1: Collect one correct prediction per category as representative explanation samples
+        explained_classes = set()
+        samples_to_explain = []
+
+        for i in range(len(test_dataset)):
+            img, label = test_dataset[i]
+            img_batch = img.unsqueeze(0).to(device)
+            
+            # Predict
+            outputs = model(img_batch)
+            pred = outputs.argmax(dim=1).item()
+            
+            if pred == label and label not in explained_classes:
+                explained_classes.add(label)
+                # Store (image_tensor, actual_label_idx, predicted_label_idx)
+                samples_to_explain.append((img, label, pred))
+                
+            if len(explained_classes) == num_classes:
+                break
+
+        # Step 2: Generate visual heatmaps and save
+        for img, label, pred in samples_to_explain:
+            img_batch = img.unsqueeze(0).to(device)
+            true_name = class_names[label]
+            pred_name = class_names[pred]
+            
+            heatmap = None
+            if explainer_type == "Grad-CAM":
+                heatmap, _ = explainer.generate_cam(img_batch, target_class=label)
+            elif explainer_type == "Attention Map":
+                heatmap = explainer.generate_attention_map(img_batch)
+
+            if heatmap is not None:
+                # Save visual explanation plot
+                safe_name = true_name.lower().replace(' ', '_')
+                save_path = os.path.join(exp_dir, f"explain_{safe_name}.png")
+                save_explanation_plot(img, heatmap, true_name, pred_name, save_path)
+                print(f"Successfully saved {explainer_type} map for '{true_name}' class to: {save_path}")
+            else:
+                print(f"[Warning] Failed to generate {explainer_type} map for class '{true_name}'.")
+
+        # Cleanup hooks
+        explainer.remove_hooks()
+    else:
+        print("[Warning] No valid explainability tool initialized.")
+
+    # Reset gradient behavior back to default
+    torch.set_grad_enabled(False)
+    print("Pipeline evaluation completed successfully.")
 
 if __name__ == "__main__":
     main()
+    
