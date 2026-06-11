@@ -5,5 +5,5 @@ scikit-learn
 matplotlib
 seaborn
 tqdm
-numpy
-opencv-python
+numpy<2.0
+opencv-python-headless>=4.5.0
