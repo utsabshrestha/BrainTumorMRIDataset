@@ -104,6 +104,8 @@ def main():
             {"params": model.layer3.parameters(),          "lr": 1e-5},
             {"params": model.layer4.parameters(),          "lr": 1e-5},
             {"params": model.proj.parameters(),            "lr": 3e-4},
+            {"params": model.proj_norm.parameters(),       "lr": 3e-4},
+            {"params": model.cnn_proj.parameters(),        "lr": 3e-4},
             {"params": model.transformer.parameters(),     "lr": 3e-4},
             {"params": model.head.parameters(),            "lr": 3e-4},
             {"params": [model.cls_token, model.pos_embed], "lr": 3e-4},
@@ -113,7 +115,7 @@ def main():
 
     # --- Label smoothing loss (0.1 for hybrid, standard CE for others) ---
     if args.model == "hybrid_cnn_vit":
-        criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+        criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
     else:
         criterion = nn.CrossEntropyLoss()
 
@@ -132,7 +134,7 @@ def main():
     ckpt_path = os.path.join(args.ckpt_dir, f"{args.model}_best.pt")
 
     # --- ADDED IF CONDITION BEFORE TRAINING ---
-    if os.path.exists(ckpt_path):
+    if os.path.exists(ckpt_path) and args.model != 'hybrid_cnn_vit':
         print(f"\n[INFO] Checkpoint found at '{ckpt_path}'. Skipping training.")
     else:
         print(f"\n[INFO] No existing checkpoint found. Starting training for {args.epochs} epochs..."
