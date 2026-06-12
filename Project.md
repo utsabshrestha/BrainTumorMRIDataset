@@ -6,14 +6,12 @@ Tumor)
 • Imaging Modality: T1-weighted contrast-enhanced MRI (2D slices)
 • Total Number of Images: 11,148 images
 • Data Split Ratio: Fixed 80% Training / 20% Testing split
-Pathology Class Training Set (80%) Testing Set (20%) Total Images
-Glioma 3,018 603 3,621
-Meningioma 2,183 436 2,619
-Pituitary Tumor 2,145 429 2,574
-No Tumor
-(Healthy)
-1,945 389 2,334
-TOTAL 8,991 1,857 11,148
+    Pathology Class 	Training Set (80%) 	Testing Set (20%) 	Total Images
+    Glioma              3,018 			603 			3,621
+    Meningioma          2,183 			436 			2,619
+    Pituitary           2,145 			429 			2,574
+    No Tumor            1,945 			389 			2,334
+    TOTAL               8,991 			1,857 			11,148
 2. Project Task
 • Main Task: The main task of this project is Multi-Class Image Classification
 combined with Explainable AI (XAI).
